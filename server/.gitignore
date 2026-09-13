@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.env.local
+.env.*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+dist/
+build/
+.admin_credentials_local
+*.local

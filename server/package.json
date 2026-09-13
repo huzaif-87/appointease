@@ -1,0 +1,49 @@
+{
+  "name": "appointease-server",
+  "version": "1.0.0",
+  "description": "AppointEase Smart Appointment Booking Platform Backend API",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "seed:appointment": "node src/seed/seed.js",
+    "verify:appointment": "node src/seed/verifyAppointment.js",
+    "verify:data": "node src/seed/verifyData.js",
+    "setup:admin": "node scripts/setupAdmin.js",
+    "test": "node test/api.test.js && node test/slotEngine.test.js && node test/bookingEngine.test.js && node test/errorHandling.test.js && node test/rescheduleCancellation.test.js && node test/smartRecommendation.test.js && node test/notifications.test.js && node test/criticalFixes.test.js && node test/finalHardening.test.js && node test/emailAndPhoneValidation.test.js",
+    "test:booking": "node test/bookingEngine.test.js",
+    "test:ux": "node test/errorHandling.test.js",
+    "test:slot": "node test/slotEngine.test.js",
+    "test:reschedule": "node test/rescheduleCancellation.test.js",
+    "test:m7": "node test/smartRecommendation.test.js",
+    "test:m8": "node test/notifications.test.js",
+    "test:fixes": "node test/criticalFixes.test.js",
+    "test:hardening": "node test/finalHardening.test.js",
+    "test:email": "node test/emailAndPhoneValidation.test.js"
+  },
+  "keywords": [
+    "appointment",
+    "booking",
+    "express",
+    "mongodb",
+    "mongoose",
+    "healthcare"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@google/genai": "^2.22.0",
+    "bcryptjs": "^3.0.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.9.5",
+    "nodemailer": "^10.0.9"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
