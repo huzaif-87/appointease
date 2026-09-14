@@ -83,6 +83,7 @@ const getTransporter = () => {
     host,
     port,
     secure: isSecure,
+    family: 4,
     auth: {
       user: EMAIL_USER,
       pass: appPassword || ''
