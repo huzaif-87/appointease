@@ -82,22 +82,27 @@ const getTransporter = () => {
   }
 
   const host = EMAIL_HOST || 'smtp.gmail.com';
-  const port = parseInt(EMAIL_PORT, 10) || 465;
+  const port = parseInt(EMAIL_PORT, 10) || 587;
   const isSecure = port === 465;
 
-  return nodemailer.createTransport({
+  const transportConfig = {
     host,
     port,
     secure: isSecure,
-    family: 4,
     auth: {
       user: EMAIL_USER,
       pass: appPassword || ''
     },
-    connectionTimeout: 8000,
-    greetingTimeout: 8000,
-    socketTimeout: 10000
-  });
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000
+  };
+
+  if (process.env.EMAIL_SERVICE) {
+    transportConfig.service = process.env.EMAIL_SERVICE;
+  }
+
+  return nodemailer.createTransport(transportConfig);
 };
 
 /**
