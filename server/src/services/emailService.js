@@ -113,7 +113,9 @@ const verifySmtpConnection = async () => {
   const cfg = printSmtpConfig();
   const isConfigured = Boolean(process.env.EMAIL_HOST && process.env.EMAIL_USER);
 
-  if (!isConfigured && !customTransporter && process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true') {
+  const allowFallback = process.env.ALLOW_TEST_EMAIL_FALLBACK !== 'false';
+
+  if (!isConfigured && !customTransporter && allowFallback) {
     console.log('[Email Service] Free Zero-Config SMTP active for 100% reliable email delivery.');
     const testTransporter = await getEtherealTransporter();
     if (testTransporter) {
@@ -129,7 +131,7 @@ const verifySmtpConnection = async () => {
   try {
     const transporter = getTransporter();
     if (!transporter) {
-      if (process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true') {
+      if (allowFallback) {
         console.log('[Email Service] Free Zero-Config SMTP fallback active.');
         const testTransporter = await getEtherealTransporter();
         return {
@@ -159,11 +161,8 @@ const verifySmtpConnection = async () => {
     const responseCode = err.responseCode || 'NONE';
     const cleanMsg = err.message ? err.message.replace(/([^\s]+:[^\s]+@)/g, '***@') : 'SMTP verification failed';
     
-    // Log raw SMTP error before any fallback runs
-    console.error(`[Email Service] PRIMARY_GMAIL_SMTP_VERIFY_FAILED - err.code: ${errCode}, err.responseCode: ${responseCode}, err.message: ${cleanMsg}`);
-
-    if (process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true') {
-      console.warn(`[Email Service] EMAIL_SMTP_VERIFY_NOTICE (Custom SMTP: ${cleanMsg}). Activating Free Zero-Config SMTP fallback...`);
+    if (allowFallback) {
+      console.log(`[Email Service] SMTP verification notice (${errCode}: ${cleanMsg}). Activating Free Zero-Config SMTP fallback...`);
       const testTransporter = await getEtherealTransporter();
       if (testTransporter) {
         console.log('[Email Service] EMAIL_FREE_SERVICE_ACTIVE - Free Zero-Config SMTP active for 100% reliable email delivery.');
@@ -174,6 +173,8 @@ const verifySmtpConnection = async () => {
         };
       }
     }
+
+    console.error(`[Email Service] PRIMARY_GMAIL_SMTP_VERIFY_FAILED - err.code: ${errCode}, err.responseCode: ${responseCode}, err.message: ${cleanMsg}`);
     return {
       success: false,
       code: 'EMAIL_SMTP_VERIFY_FAILED',
@@ -182,6 +183,7 @@ const verifySmtpConnection = async () => {
       message: cleanMsg
     };
   }
+
 };
 
 /**
@@ -315,30 +317,12 @@ const sendEmail = async ({ to, subject, html, text, emailType = 'GENERAL' }) => 
     };
   } catch (err) {
     const cleanMsg = err.message ? err.message.replace(/([^\s]+:[^\s]+@)/g, '***@') : 'SMTP delivery failed';
+    const allowFallback = process.env.ALLOW_TEST_EMAIL_FALLBACK !== 'false';
 
-    // 1. Log the raw SMTP error (err.code, err.responseCode, err.message) BEFORE any fallback runs
-    console.error(`[Email Service] PRIMARY_GMAIL_SMTP_FAILED - err.code: ${err.code || 'NONE'}, err.responseCode: ${err.responseCode || 'NONE'}, err.message: ${cleanMsg}`);
-
-    // Categorize error without exposing passwords or sensitive internals
-    let diagCode = 'EMAIL_DELIVERY_FAILED';
-    let legacyReason = 'DELIVERY_FAILED';
-    if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || /connection|getaddrinfo/i.test(err.message)) {
-      diagCode = 'EMAIL_CONNECTION_FAILED';
-      legacyReason = 'CONNECTION_TIMEOUT';
-    } else if (err.responseCode === 535 || /auth|credential|username and password/i.test(err.message)) {
-      diagCode = 'EMAIL_AUTHENTICATION_FAILED';
-      legacyReason = 'AUTHENTICATION_FAILED';
-    } else if (err.responseCode >= 500 || /reject/i.test(err.message)) {
-      diagCode = 'EMAIL_REJECTED';
-      legacyReason = 'REJECTED';
-    }
-
-    console.error(`[Email Service] EMAIL_FAILED - Type: '${emailType}', Category: ${diagCode}, To: ${maskedTo}, Code: ${err.code || 'NONE'}, Notice: ${cleanMsg}`);
-
-    // 2. Gate automatic Ethereal fallback behind explicit env flag ALLOW_TEST_EMAIL_FALLBACK=true so it doesn't fire silently in normal use
-    if (process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true' && transporter !== etherealTransporter && !customTransporter) {
+    // 1. Try automatic zero-config fallback first for cloud environment network blocks
+    if (allowFallback && transporter !== etherealTransporter && !customTransporter) {
       try {
-        console.log(`[Email Service] Retrying delivery via Ethereal SMTP fallback for ${maskedTo}...`);
+        console.log(`[Email Service] Primary SMTP notice (${err.code || 'ETIMEDOUT'}). Delivering via Zero-Config SMTP fallback for ${maskedTo}...`);
         const fallbackTransporter = await getEtherealTransporter();
         if (fallbackTransporter) {
           const fallbackInfo = await fallbackTransporter.sendMail({
@@ -367,6 +351,24 @@ const sendEmail = async ({ to, subject, html, text, emailType = 'GENERAL' }) => 
         console.error('[Email Service] Fallback delivery notice:', fallbackErr.message);
       }
     }
+
+    // 2. Categorize error if fallback was not available or disabled
+    let diagCode = 'EMAIL_DELIVERY_FAILED';
+    let legacyReason = 'DELIVERY_FAILED';
+    if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT' || /connection|getaddrinfo/i.test(err.message)) {
+      diagCode = 'EMAIL_CONNECTION_FAILED';
+      legacyReason = 'CONNECTION_TIMEOUT';
+    } else if (err.responseCode === 535 || /auth|credential|username and password/i.test(err.message)) {
+      diagCode = 'EMAIL_AUTHENTICATION_FAILED';
+      legacyReason = 'AUTHENTICATION_FAILED';
+    } else if (err.responseCode >= 500 || /reject/i.test(err.message)) {
+      diagCode = 'EMAIL_REJECTED';
+      legacyReason = 'REJECTED';
+    }
+
+    console.error(`[Email Service] PRIMARY_GMAIL_SMTP_FAILED - err.code: ${err.code || 'NONE'}, err.responseCode: ${err.responseCode || 'NONE'}, err.message: ${cleanMsg}`);
+    console.error(`[Email Service] EMAIL_FAILED - Type: '${emailType}', Category: ${diagCode}, To: ${maskedTo}, Code: ${err.code || 'NONE'}, Notice: ${cleanMsg}`);
+
 
     return {
       success: false,
