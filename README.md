@@ -1,186 +1,382 @@
 # AppointEase
 
-Smart Appointment Booking Platform
+AppointEase is a full-stack smart appointment booking platform that allows patients to find providers, check real-time available slots, book appointments, and manage their appointments. Providers can manage appointments and availability, while administrators can manage the platform.
 
-## 1. Overview
-AppointEase is an enterprise-grade healthcare appointment management platform engineered to connect patients with verified medical providers seamlessly while guaranteeing strict double-booking prevention, automated slot engine calculations, real-time availability sync, role-based access control (RBAC), and Google Gemini-powered smart scheduling search.
+---
 
-## 2. Live Demo
-- **Frontend Application (Vercel)**: https://appointease.vercel.app
-- **Backend API (Render)**: https://appointease-backend.onrender.com/api
-- **API Health Check**: https://appointease-backend.onrender.com/api/health
+## Live Demo
 
-## 3. GitHub
-- **Repository**: https://github.com/huzaif-87/appointease
+- **Main Live Demo (Frontend)**: https://appointease-gamma.vercel.app
+- **Backend API**: https://appointease-backend-jy02.onrender.com
+- **GitHub Repository**: https://github.com/huzaif-87/appointease
 
-## 4. Key Features
-- **Smart Time Recommendation**: Natural language appointment search powered server-side by Google Gemini AI.
-- **Dynamic Slot Generation Engine**: Real-time conflict-free slot creation based on provider operating hours, break windows, existing appointments, and slot durations.
-- **Atomic Double Booking Prevention**: Multi-layered database transaction/atomic locking guarantees zero double-booking even under concurrent race conditions.
-- **Role-Based Access Control (RBAC)**: Distinct, isolated workflows and permissions for `patient`, `provider`, and `admin` roles.
-- **Flexible Rescheduling & Cancellation**: Automated policy enforcement with configurable deadline windows and instant slot restoration.
-- **Multi-Channel Notifications & SMTP Email**: Real-time in-app alerts alongside production Nodemailer email notifications.
-- **Production Security Hardening**: Helmet HTTP headers, scoped CORS policies, granular API rate limiting, and sanitized inputs.
+---
 
-## 5. Patient Experience
-- **Provider & Service Discovery**: Search, filter, and inspect verified medical specialists and healthcare services.
-- **Interactive Booking Flow**: Select date, inspect available slots, enter visit details, review, and instantly confirm appointments.
-- **Personal Dashboard**: Track upcoming and past visits, download confirmation receipts, cancel or reschedule eligible visits, and manage profile settings.
-- **AI Smart Assistant**: Natural language query input (e.g., *"Cardiologist available after 5 PM this week"*) that resolves directly to matching time slots.
+## Overview
 
-## 6. Provider Experience
-- **Dedicated Provider Console**: Customized dashboard for doctor schedule and patient consultation management.
-- **Availability Configurator**: Define weekly recurring work shifts, daily start/end times, lunch break windows, and appointment durations.
-- **Appointment Management**: View scheduled appointments, review patient details, update consultation statuses, and issue status updates.
+AppointEase provides a complete appointment management workflow for healthcare and professional consultation services.
 
-## 7. Admin Experience
-- **Comprehensive Administration Suite**: Centralized dashboard for managing all system entities.
-- **User & Provider Governance**: Verify doctor credentials, activate/deactivate accounts, update roles, and audit access logs.
-- **Service & Slot Oversight**: Manage clinical service offerings, baseline pricing, duration parameters, and system-wide slot allocations.
-- **Strict Permission Guardrails**: Unauthorized access attempts by non-admin roles trigger instant HTTP 403 Forbidden responses.
+The platform allows patients to search for healthcare providers, view available appointment times in real time, and book consultations instantly. Patients can track their upcoming appointments, cancel bookings, or reschedule to another time slot.
 
-## 8. Smart Search with Gemini
-- **Server-Side AI Integration**: Queries are securely processed on the Express backend via Google Gemini API—preventing key leakage.
-- **Intent & Constraint Extraction**: Transforms unstructured queries into structured constraints (specialty, date ranges, time-of-day preferences).
-- **Slot Engine Synthesis**: Feeds extracted constraints into the deterministic slot engine to return exact, bookable appointment slots.
+Providers have access to a specialized console where they can view scheduled appointments, update availability shifts, and manage consultation services. Platform administrators can oversee users, providers, services, and system-wide appointment schedules.
 
-## 9. Dynamic Slot Engine
-- **Algorithmic Slot Calculation**: Dynamically computes open slots by segmenting doctor working windows, excluding breaks and existing bookings.
-- **Timezone Awareness**: Handles shift boundaries cleanly across configurable timezones (`APP_TIMEZONE`).
-- **Real-Time Buffer Enforcement**: Enforces minimum advance booking windows (`MIN_BOOKING_BUFFER_MINUTES`) to prevent immediate past-slot claims.
+AppointEase also features an AI-powered Smart Scheduling assistant that allows users to describe their appointment needs in plain English.
 
-## 10. Double Booking Prevention
-- **Database Unique Compound Index**: Enforces uniqueness on `(doctorId, startTime)` where appointment status is active.
-- **Atomic Conditional Locks**: Prevents race conditions during simultaneous booking submissions via atomic MongoDB query filters.
-- **Slot Availability Verification**: Pre-booking validation step checks for overlapping appointments within the target time block.
+---
 
-## 11. Cancellation & Rescheduling
-- **Time-Window Policy Enforcement**: Cancellation and rescheduling allowed only prior to configured cutoff windows (`CANCELLATION_WINDOW_MINUTES`).
-- **Instant Slot Recovery**: Immediate state updates free up canceled time blocks for other patients.
-- **Audit Trails**: All status transitions log notification history and send automated status emails.
+## Key Features
 
-## 12. Notifications & Email
-- **In-App Notification Engine**: Unread counter, status badge updates, and real-time notification drawer.
-- **Production SMTP Email Delivery**: Real-time email dispatch for booking confirmations, cancellations, rescheduling, and password resets using Nodemailer.
-- **Fail-Safe Async Execution**: Email service errors never crash the backend or rollback successful bookings.
+### Patient
+- Register and login
+- Search providers and services
+- View provider details
+- View available appointment slots
+- Book appointments
+- View appointments
+- Cancel appointments
+- Reschedule appointments
+- Receive notifications
+- Receive email updates
+- Manage profile
 
-## 13. Authentication & RBAC
-- **JSON Web Tokens (JWT)**: Secure statetess authentication with encrypted token headers.
-- **Password Hashing**: Bcryptjs with salt rounds for secure password storage.
-- **Role Isolation**: Middleware (`protect`, `authorize('admin')`, `authorize('provider')`) enforces strict route access control.
+### Provider
+- Provider login
+- Provider dashboard
+- View appointments
+- Manage availability
+- Manage services
+- Manage profile
 
-## 14. Security
-- **No Secret Exposure**: Zero credentials committed; all sensitive settings loaded via environment variables.
-- **Scoped CORS**: Restricted in production to the specific deployed Vercel frontend URL.
-- **API Rate Limiting**: Scoped rate limiters for authentication, booking, public endpoints, and AI requests.
-- **Input Sanitization & Validation**: Express validators sanitize request payloads against injection attacks.
+### Admin
+- Admin login
+- Dashboard overview
+- Manage appointments
+- Manage providers
+- Manage services
+- Manage availability
+- Manage users
+- Role-based access control
 
-## 15. Architecture
+### Smart Scheduling
+Users can search for appointments using natural language queries such as:
+
+> *"I need an appointment after 5 PM this week"*
+
+The system uses Google Gemini AI to parse the request into structured scheduling constraints. The backend then passes these constraints to the deterministic slot engine to find matching, available slots.
+
+*AI only assists in understanding the scheduling request—the backend performs all verification and database operations.*
+
+---
+
+## AI Research & Usage
+
+Google Gemini API was integrated to support natural-language appointment requests.
+
+When a user submits a natural-language search, Gemini extracts structured parameters such as:
+- Preferred time of day (morning, afternoon, evening)
+- Preferred date or day range (today, tomorrow, this week)
+- Specialty or service type
+- Combined timing constraints
+
+The backend validates these extracted constraints and runs them through the deterministic slot engine to calculate actual availability. This ensures that AI handles natural-language interpretation, while the backend maintains 100% accuracy for booking.
+
+> **Important Note:**  
+> The Smart Scheduling feature uses an API with limited available tokens/quota. Therefore, Smart Search usage may be limited during the live demo. If the AI service is temporarily unavailable or the API quota is reached, the application uses a safe fallback approach for supported scheduling queries.
+
+---
+
+## Logical Approach
+
+The system follows a clear, structured flow:
+
 ```text
-GitHub Repository
-├── client/       React 18 + Vite + Tailwind CSS Frontend
-└── server/       Node.js + Express Backend API
-
-Architecture Flow:
-Vercel (Frontend) ---> Render (Express Backend API) ---> MongoDB Atlas (Database)
-                                |
-                                +---> Google Gemini API (NLP Intent Extraction)
-                                +---> Nodemailer SMTP (Email Notifications)
+User ➔ Select Provider/Service ➔ Choose Date ➔ View Available Slots ➔ Book ➔ Confirmation
 ```
 
-## 16. Database Design
-- **User Schema**: `_name`, `email`, `password`, `role` (`patient`, `provider`, `admin`), `isVerified`, `resetPasswordToken`.
-- **Doctor Schema**: `userId`, `specialty`, `qualification`, `experienceYears`, `consultationFee`, `bio`, `isVerified`.
-- **Availability Schema**: `doctorId`, `dayOfWeek`, `startTime`, `endTime`, `breakStart`, `breakEnd`, `slotDurationMinutes`, `isAvailable`.
-- **Appointment Schema**: `patientId`, `doctorId`, `serviceId`, `date`, `startTime`, `endTime`, `status` (`scheduled`, `completed`, `cancelled`), `notes`.
-- **Notification Schema**: `userId`, `title`, `message`, `type`, `isRead`, `createdAt`.
+### Dynamic Availability Calculation
 
-## 17. Tech Stack
-- **Frontend**: React 18, Vite, Tailwind CSS, Lucide React, Axios, React Router v6.
-- **Backend**: Node.js, Express.js, Mongoose, JWT, Bcryptjs, Helmet, CORS, Express-Rate-Limit, Nodemailer.
-- **Database**: MongoDB Atlas (Production), MongoDB Local (Development).
-- **AI & Integrations**: Google Gemini API (`@google/genai`).
-- **Hosting & CI/CD**: Vercel (Frontend), Render (Backend), GitHub (Version Control).
+Available slots are calculated on demand using the following formula:
 
-## 18. Testing
-- **Backend Test Suite**: 100% passing test coverage across 10 test suites running via Jest & Supertest.
-- **Automated Coverage**: API routes, slot engine calculations, booking race conditions, cancellation policies, RBAC enforcement, and notification triggers.
-- **Frontend Build Verification**: Clean compilation using Vite with zero build or lint warnings.
-
-## 19. Deployment
-- **Frontend (Vercel)**: Configured with Root Directory `client`, build command `npm run build`, output directory `dist`, environment variable `VITE_API_BASE_URL`.
-- **Backend (Render)**: Configured with Root Directory `server`, build command `npm install`, start command `npm start`, environment variables securely injected.
-
-## 20. Environment Variables
-### Server (`server/.env.example`)
-```env
-MONGO_URI=
-JWT_SECRET=
-JWT_EXPIRES_IN=30m
-
-GEMINI_API_KEY=
-GEMINI_MODEL=
-
-EMAIL_HOST=
-EMAIL_PORT=
-EMAIL_USER=
-EMAIL_PASSWORD=
-EMAIL_FROM=
-
-APP_TIMEZONE=Asia/Kolkata
-
-CANCELLATION_WINDOW_MINUTES=120
-RESCHEDULE_WINDOW_MINUTES=120
-MIN_BOOKING_BUFFER_MINUTES=30
-
-CLIENT_URL=
+```text
+Provider Working Hours
++ Service Duration
+- Existing Active Appointments
+= Real-Time Available Slots
 ```
 
-### Client (`client/.env.example`)
-```env
-VITE_API_BASE_URL=https://<render-backend-url>/api
+### Reliability Guarantees
+- **Server-Side Validation**: All inputs are checked on the server.
+- **Overlap & Double-Booking Prevention**: Checks ensure a slot cannot be booked twice.
+- **Idempotency Protection**: Unique request keys prevent accidental duplicate bookings.
+- **Timezone Awareness**: Schedules are evaluated in configured timezones (`Asia/Kolkata`).
+- **Policy Windows**: Minimum advance buffer time and cancellation/rescheduling deadlines are strictly enforced.
+
+---
+
+## Why These Elements Were Used
+
+Each technology was chosen to meet specific application needs:
+
+- **React**: Enables a fast, interactive, and responsive user interface.
+- **Node.js & Express**: Provides scalable API endpoints and server-side business logic.
+- **MongoDB & Mongoose**: Offers flexible data storage for users, providers, services, and bookings.
+- **JWT Authentication**: Ensures secure, stateless user sessions across requests.
+- **Role-Based Access Control (RBAC)**: Separates permissions for Patients, Providers, and Admins.
+- **Dynamic Slot Calculation**: Calculates open slots on demand rather than storing millions of static slots.
+- **Notifications & Email**: Provides instant in-app alerts and email updates to enhance user experience.
+- **Google Gemini API**: Enables natural-language appointment scheduling.
+- **Vercel & Render**: Delivers reliable cloud hosting for frontend and backend components.
+
+---
+
+## Unique Approach
+
+The primary differentiator of AppointEase is **Smart Scheduling**.
+
+Instead of forcing users to manually select multiple dropdown filters, users can describe their schedule preference in natural language:
+
+> *"I need a cardiology appointment after 5 PM this week."*
+
+The application interprets the request and returns exact, bookable time slots. Recommendations include clear explainability details, such as:
+- Matches requested time
+- Earliest available slot
+- Verified provider availability
+
+---
+
+## Appointment Management
+
+AppointEase supports complete appointment lifecycle management:
+
+- **Booking**: Real-time reservation of available slots with idempotency protection.
+- **Confirmation**: Immediate status update with booking reference generation.
+- **Cancellation**: One-click cancellation subject to configured cutoff windows.
+- **Rescheduling**: Move bookings to a new available slot in a single step.
+- **Double-Booking Protection**: Atomic locking prevents simultaneous booking conflicts.
+- **Status & History**: View upcoming, completed, and cancelled appointments.
+
+Cancellation and rescheduling policies require requests to be submitted before the configured time-window deadline (e.g. 2 hours before appointment).
+
+---
+
+## Email Notifications
+
+After a successful appointment confirmation, the registered user's email receives an appointment confirmation email.
+
+When an appointment is successfully rescheduled, the user receives a rescheduling email.
+
+When an appointment is successfully cancelled, the user receives a cancellation email.
+
+> **Note:** Emails are sent after the corresponding backend operation is successfully completed.
+
+---
+
+## Security
+
+- **Password Hashing**: Passwords stored using `bcryptjs` with salt rounds.
+- **JWT Authentication**: Secured tokens verify user identity on protected routes.
+- **Role Authorization**: Middleware restricts route access based on user role (`PATIENT`, `PROVIDER`, `ADMIN`).
+- **CORS Configuration**: Restricts API access to the official Vercel deployment URL.
+- **Server-Side API Keys**: Gemini API keys are kept securely on the server.
+- **Environment Variables**: Sensitive configurations are loaded via environment variables.
+- **Idempotency Protection**: Prevents duplicate bookings from network retries.
+- **Zero Committed Secrets**: No passwords, database URIs, or private keys in source control.
+
+---
+
+## Tech Stack
+
+### Frontend
+- React 18
+- Vite
+- Tailwind CSS
+- Axios
+- React Router v6
+
+### Backend
+- Node.js
+- Express.js
+- MongoDB & Mongoose
+- JSON Web Token (JWT)
+- bcryptjs
+- Nodemailer
+
+### AI & Cloud Services
+- Google Gemini API
+- Vercel (Frontend Hosting)
+- Render (Backend Hosting)
+- MongoDB Atlas (Cloud Database)
+
+---
+
+## Project Structure
+
+```text
+appointease/
+├── client/                 # React frontend application
+│   ├── src/
+│   │   ├── components/     # UI components
+│   │   ├── pages/          # Application pages (Patient, Provider, Admin)
+│   │   ├── services/       # API integration services
+│   │   └── utils/          # Helper functions & error mappers
+│   ├── package.json
+│   └── vite.config.js
+├── server/                 # Node.js Express backend API
+│   ├── src/
+│   │   ├── config/         # Database & environment setup
+│   │   ├── controllers/    # API request handlers
+│   │   ├── middleware/     # Auth, RBAC, error & CORS middleware
+│   │   ├── models/         # MongoDB Mongoose schemas
+│   │   ├── routes/         # Express API routes
+│   │   └── services/       # Email, AI & slot engine logic
+│   ├── test/               # Automated test suites
+│   └── package.json
+├── README.md
+└── .gitignore
 ```
 
-## 21. Local Setup
+---
+
+## Testing
+
+AppointEase includes automated test coverage for backend API logic and frontend production builds.
+
+### Backend Automated Tests
+The backend features **258 automated test scenarios across 11 test suites**:
+- `cors.test.js`: Preflight OPTIONS & header permissions (7 tests)
+- `api.test.js`: Core REST API endpoints (25 tests)
+- `slotEngine.test.js`: Dynamic slot engine & shift boundaries (23 tests)
+- `bookingEngine.test.js`: Concurrency, double-booking & idempotency (34 tests)
+- `errorHandling.test.js`: Friendly error mapping & technical leak prevention (11 tests)
+- `rescheduleCancellation.test.js`: Rescheduling & cancellation policy validation (32 tests)
+- `smartRecommendation.test.js`: AI Smart Scheduling & fallback parsing (43 tests)
+- `notifications.test.js`: Notification CRUD & email delivery isolation (36 tests)
+- `criticalFixes.test.js`: Edge cases & data integrity (15 tests)
+- `finalHardening.test.js`: Security & RBAC guardrails (18 tests)
+- `emailAndPhoneValidation.test.js`: User input validation (14 tests)
+
+### Frontend Build
+Frontend production build completed successfully using Vite.
+
+---
+
+## Deployment
+
+- **Frontend**: Hosted on **Vercel** (`client/`) ➔ https://appointease-gamma.vercel.app
+- **Backend**: Hosted on **Render** (`server/`) ➔ https://appointease-backend-jy02.onrender.com
+- **Database**: Cloud **MongoDB Atlas**
+- **AI Service**: **Google Gemini API**
+- **Email**: **Gmail SMTP / Nodemailer**
+
+---
+
+## Environment Variables
+
+### Backend Variables (`server/.env`)
+- `MONGO_URI`
+- `JWT_SECRET`
+- `JWT_EXPIRES_IN`
+- `GEMINI_API_KEY`
+- `GEMINI_MODEL`
+- `EMAIL_HOST`
+- `EMAIL_PORT`
+- `EMAIL_USER`
+- `EMAIL_PASSWORD`
+- `EMAIL_FROM`
+- `APP_TIMEZONE`
+- `CANCELLATION_WINDOW_MINUTES`
+- `RESCHEDULE_WINDOW_MINUTES`
+- `MIN_BOOKING_BUFFER_MINUTES`
+- `CLIENT_URL`
+
+### Frontend Variables (`client/.env`)
+- `VITE_API_BASE_URL`
+
+*Never commit `.env` files or credentials to GitHub.*
+
+---
+
+## Local Setup
+
 ### 1. Clone Repository
 ```bash
 git clone https://github.com/huzaif-87/appointease.git
 cd appointease
 ```
 
-### 2. Backend Installation & Start
+### 2. Install Server Dependencies
 ```bash
 cd server
 npm install
-cp .env.example .env
-# Fill in local development environment variables
-npm run dev
 ```
 
-### 3. Frontend Installation & Start
+### 3. Install Client Dependencies
 ```bash
 cd ../client
 npm install
-cp .env.example .env
-# Set VITE_API_BASE_URL=http://localhost:5000/api
+```
+
+### 4. Configure Environment Variables
+- Create `server/.env` based on `server/.env.example`
+- Create `client/.env` setting `VITE_API_BASE_URL=http://localhost:5000/api`
+
+### 5. Start Backend Server
+```bash
+cd server
 npm run dev
 ```
 
-## 22. AI Research & Usage
-Google Gemini AI integration serves as a natural language scheduling assistant. Rather than relying on rigid filter forms, patients can type plain text queries. The backend extracts clinical specialty requirements, preferred times, and dates, then queries the deterministic slot engine to return precise, real-time availability.
+### 6. Start Frontend Development Server
+```bash
+cd client
+npm run dev
+```
 
-## 23. Logical Approach
-The platform separates non-deterministic AI capabilities from deterministic financial/scheduling rules:
-1. **AI layer**: Handles intent extraction and parsing only.
-2. **Backend engine**: Calculates slots, enforces business rules, and performs atomic database operations.
-3. **Database layer**: Enforces structural uniqueness constraints, preventing race conditions regardless of concurrency.
+---
 
-## 24. Reason for Using Each Major Element
-- **React + Vite**: Delivers lightning-fast page loading and state transitions for a smooth single-page application experience.
-- **Tailwind CSS**: Enables custom, high-contrast, modern UI designs with consistent tokens and responsive utility styling.
-- **Node.js + Express**: Provides asynchronous, event-driven HTTP routing with easy middleware integration.
-- **MongoDB + Mongoose**: Enables flexible document modeling while providing strict schema validation and compound indexing.
-- **Google Gemini**: Offers top-tier natural language processing capabilities for conversational appointment search.
+## Future Improvements
 
-## 25. Unique Approach
-AppointEase guarantees zero double bookings by combining optimistic slot calculation with database-level uniqueness constraints and atomic state updates. If two users attempt to book the exact same slot simultaneously, MongoDB compound indexes reject the second transaction gracefully, guaranteeing database integrity without sacrificing performance.
+- Calendar synchronization (Google Calendar / Outlook)
+- Automated SMS reminders
+- Integrated online payment processing
+- Advanced analytics for healthcare providers
+- Multi-language support for AI scheduling
+
+---
+
+## Recruiter Highlights
+
+### What This Project Demonstrates
+- **Full-Stack Development**: Clean separation of React frontend and Express REST API backend.
+- **Database Architecture**: Relational modeling in MongoDB for users, services, providers, shifts, and bookings.
+- **Authentication & RBAC**: Secure JWT authentication with role-isolated workflows for Patients, Providers, and Admins.
+- **Dynamic Scheduling Logic**: Algorithmic slot generation without storing redundant database records.
+- **Double-Booking Prevention**: Concurrency control preventing overlapping appointment claims.
+- **AI Integration**: Server-side Gemini AI integration with fallback handling.
+- **Email & Notification Engine**: In-app notifications and email updates for booking state changes.
+- **Production Deployment**: Active cloud deployment on Vercel, Render, and MongoDB Atlas.
+- **Automated Testing**: Comprehensive test coverage verifying system reliability.
+
+---
+
+## Assignment Requirements
+
+### 1. AI Research & Usage
+Google Gemini API was researched and integrated for natural-language appointment scheduling. The AI converts user scheduling requests into structured constraints, while deterministic backend logic verifies real availability.
+
+### 2. Logical Approach
+The system separates provider availability, service duration, existing appointments, and booking validation. Available slots are calculated dynamically and validated again on the server before an appointment is created.
+
+### 3. Reason for Using the Elements
+Each technology and feature was selected based on the problem it solves: React for an interactive UI, Express for APIs, MongoDB for persistent data, JWT/RBAC for security, dynamic slot calculation for accurate scheduling, and Gemini for natural-language interaction.
+
+### 4. Unique Approach
+The main unique feature is **Smart Scheduling**, where users can describe their preferred appointment time in natural language instead of manually applying multiple filters.
+
+---
+
+## Final Notes
+
+AppointEase is a demonstration project built to showcase full-stack development, practical AI integration, secure appointment management, and production deployment.
+
+> **Live Demo Note:** Smart Scheduling uses a limited API quota/token allowance in the live demo. If the quota is temporarily exhausted, the application falls back to deterministic supported scheduling logic.
