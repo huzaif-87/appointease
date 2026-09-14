@@ -19,8 +19,10 @@ app.set('trust proxy', 1);
 app.use(helmet());
 
 // 2. CORS Configuration
+const rawClientUrl = process.env.CLIENT_URL ? process.env.CLIENT_URL.trim().replace(/\/+$/, '') : null;
+
 const allowedOrigins = [
-  process.env.CLIENT_URL,
+  rawClientUrl,
   'http://localhost:5173',
   'http://127.0.0.1:5173',
   'http://localhost:3000'
@@ -30,7 +32,15 @@ app.use(
   cors({
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl, or server-to-server)
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (!origin) {
+        return callback(null, true);
+      }
+      const normalizedOrigin = origin.trim().replace(/\/+$/, '');
+      const isAllowed = allowedOrigins.some((allowed) => {
+        return normalizedOrigin === allowed.trim().replace(/\/+$/, '');
+      });
+
+      if (isAllowed) {
         return callback(null, true);
       }
       if (process.env.NODE_ENV === 'production') {
@@ -40,9 +50,11 @@ app.use(
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'idempotency-key', 'X-Requested-With', 'Accept'],
+    optionsSuccessStatus: 204
   })
 );
+
 
 // 3. Body Parsing Middleware
 app.use(express.json({ limit: '10kb' }));

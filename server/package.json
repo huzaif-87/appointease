@@ -10,7 +10,7 @@
     "verify:appointment": "node src/seed/verifyAppointment.js",
     "verify:data": "node src/seed/verifyData.js",
     "setup:admin": "node scripts/setupAdmin.js",
-    "test": "node test/api.test.js && node test/slotEngine.test.js && node test/bookingEngine.test.js && node test/errorHandling.test.js && node test/rescheduleCancellation.test.js && node test/smartRecommendation.test.js && node test/notifications.test.js && node test/criticalFixes.test.js && node test/finalHardening.test.js && node test/emailAndPhoneValidation.test.js",
+    "test": "node test/cors.test.js && node test/api.test.js && node test/slotEngine.test.js && node test/bookingEngine.test.js && node test/errorHandling.test.js && node test/rescheduleCancellation.test.js && node test/smartRecommendation.test.js && node test/notifications.test.js && node test/criticalFixes.test.js && node test/finalHardening.test.js && node test/emailAndPhoneValidation.test.js",
     "test:booking": "node test/bookingEngine.test.js",
     "test:ux": "node test/errorHandling.test.js",
     "test:slot": "node test/slotEngine.test.js",
