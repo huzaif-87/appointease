@@ -1,4 +1,10 @@
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+
+// Enforce IPv4 DNS resolution first to prevent ENETUNREACH errors on IPv6-restricted cloud environments (like Render)
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder('ipv4first');
+}
 
 /**
  * Reusable backend Email Service for AppointEase

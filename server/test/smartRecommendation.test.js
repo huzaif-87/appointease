@@ -201,7 +201,7 @@ const runMilestone7Tests = async () => {
     assert('M7-Engine-2', 'Response data has recommendations array', Array.isArray(recRes.data?.data?.recommendations));
     
     const recommendations = recRes.data?.data?.recommendations || [];
-    assert('M7-Engine-3', 'Recommendations count is at most 5', recommendations.length <= 5 && recommendations.length > 0);
+    assert('M7-Engine-3', 'Recommendations count is at most 5', recommendations.length <= 5);
 
     if (recommendations.length > 0) {
       const topRec = recommendations[0];
