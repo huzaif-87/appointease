@@ -6,11 +6,15 @@ const {
   getMyAppointments,
   getAppointmentDetailsHandler,
   cancelAppointmentHandler,
-  rescheduleAppointmentHandler
+  rescheduleAppointmentHandler,
+  confirmBookingHandler
 } = require('../controllers/appointmentController');
 
 // All appointment operations require authentication
 router.use(protect());
+
+// POST /api/appointments/booking-confirmation - Confirm booking and trigger per-user email
+router.post('/booking-confirmation', confirmBookingHandler);
 
 // POST /api/appointments - Book appointment (PATIENT role)
 router.post('/', requireRole('PATIENT'), createAppointment);
@@ -20,6 +24,9 @@ router.get('/', requireRole('PATIENT'), getMyAppointments);
 
 // GET /api/appointments/:id - Get single appointment details for reschedule/review (PATIENT role)
 router.get('/:id', requireRole('PATIENT'), getAppointmentDetailsHandler);
+
+// PATCH /api/appointments/:id/confirm - Confirm booking status
+router.patch('/:id/confirm', confirmBookingHandler);
 
 // PATCH /api/appointments/:id/cancel - Cancel appointment (PATIENT role required per policy)
 router.patch('/:id/cancel', requireRole('PATIENT'), cancelAppointmentHandler);

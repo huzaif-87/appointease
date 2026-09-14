@@ -49,10 +49,12 @@ const printSmtpConfig = () => {
 };
 
 /**
- * Create or get Nodemailer transporter
- * Handles:
- * - SMTP port 587 -> secure=false / STARTTLS upgrade
- * - SMTP port 465 -> secure=true / Direct SSL
+ * Create or get Nodemailer transporter using Gmail SMTP via App Password.
+ * Fixed sender credentials are read from EMAIL_USER and EMAIL_APP_PASSWORD (or EMAIL_PASSWORD).
+ * 
+ * NOTE: Personal Gmail accounts have a sending limit of ~500 emails/day.
+ * The transporter config below can easily be swapped for SendGrid, Mailgun, or AWS SES
+ * in production without touching the rest of the application or business logic!
  */
 const getTransporter = () => {
   if (customTransporter) {
@@ -63,24 +65,27 @@ const getTransporter = () => {
     EMAIL_HOST,
     EMAIL_PORT,
     EMAIL_USER,
+    EMAIL_APP_PASSWORD,
     EMAIL_PASSWORD
   } = process.env;
 
-  if (!EMAIL_HOST || !EMAIL_USER) {
+  const appPassword = EMAIL_APP_PASSWORD || EMAIL_PASSWORD;
+
+  if (!EMAIL_USER) {
     return null;
   }
 
-  const port = parseInt(EMAIL_PORT, 10) || 587;
-  // Explicitly handle 587 -> secure: false, 465 -> secure: true
+  const host = EMAIL_HOST || 'smtp.gmail.com';
+  const port = parseInt(EMAIL_PORT, 10) || 465;
   const isSecure = port === 465;
 
   return nodemailer.createTransport({
-    host: EMAIL_HOST,
+    host,
     port,
     secure: isSecure,
     auth: {
       user: EMAIL_USER,
-      pass: EMAIL_PASSWORD || ''
+      pass: appPassword || ''
     },
     connectionTimeout: 8000,
     greetingTimeout: 8000,
@@ -96,7 +101,7 @@ const verifySmtpConnection = async () => {
   const cfg = printSmtpConfig();
   const isConfigured = Boolean(process.env.EMAIL_HOST && process.env.EMAIL_USER);
 
-  if (!isConfigured && !customTransporter) {
+  if (!isConfigured && !customTransporter && process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true') {
     console.log('[Email Service] Free Zero-Config SMTP active for 100% reliable email delivery.');
     const testTransporter = await getEtherealTransporter();
     if (testTransporter) {
@@ -112,12 +117,19 @@ const verifySmtpConnection = async () => {
   try {
     const transporter = getTransporter();
     if (!transporter) {
-      console.log('[Email Service] Free Zero-Config SMTP fallback active.');
-      const testTransporter = await getEtherealTransporter();
+      if (process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true') {
+        console.log('[Email Service] Free Zero-Config SMTP fallback active.');
+        const testTransporter = await getEtherealTransporter();
+        return {
+          success: true,
+          code: 'EMAIL_FREE_SERVICE_ACTIVE',
+          message: 'Free Zero-Config SMTP active'
+        };
+      }
       return {
-        success: true,
-        code: 'EMAIL_FREE_SERVICE_ACTIVE',
-        message: 'Free Zero-Config SMTP active'
+        success: false,
+        code: 'EMAIL_NOT_CONFIGURED',
+        message: 'SMTP credentials not configured'
       };
     }
 
@@ -134,15 +146,21 @@ const verifySmtpConnection = async () => {
     const errCode = err.code || 'UNKNOWN';
     const responseCode = err.responseCode || 'NONE';
     const cleanMsg = err.message ? err.message.replace(/([^\s]+:[^\s]+@)/g, '***@') : 'SMTP verification failed';
-    console.warn(`[Email Service] EMAIL_SMTP_VERIFY_NOTICE (Custom SMTP: ${cleanMsg}). Activating Free Zero-Config SMTP fallback...`);
-    const testTransporter = await getEtherealTransporter();
-    if (testTransporter) {
-      console.log('[Email Service] EMAIL_FREE_SERVICE_ACTIVE - Free Zero-Config SMTP active for 100% reliable email delivery.');
-      return {
-        success: true,
-        code: 'EMAIL_FREE_SERVICE_ACTIVE',
-        message: 'Free Zero-Config SMTP service is active.'
-      };
+    
+    // Log raw SMTP error before any fallback runs
+    console.error(`[Email Service] PRIMARY_GMAIL_SMTP_VERIFY_FAILED - err.code: ${errCode}, err.responseCode: ${responseCode}, err.message: ${cleanMsg}`);
+
+    if (process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true') {
+      console.warn(`[Email Service] EMAIL_SMTP_VERIFY_NOTICE (Custom SMTP: ${cleanMsg}). Activating Free Zero-Config SMTP fallback...`);
+      const testTransporter = await getEtherealTransporter();
+      if (testTransporter) {
+        console.log('[Email Service] EMAIL_FREE_SERVICE_ACTIVE - Free Zero-Config SMTP active for 100% reliable email delivery.');
+        return {
+          success: true,
+          code: 'EMAIL_FREE_SERVICE_ACTIVE',
+          message: 'Free Zero-Config SMTP service is active.'
+        };
+      }
     }
     return {
       success: false,
@@ -155,9 +173,9 @@ const verifySmtpConnection = async () => {
 };
 
 /**
- * Mask recipient email address for safe logging
- * e.g. "patient.sharma@example.com" -> "p***a@example.com"
- */
+  * Mask recipient email address for safe logging
+  * e.g. "patient.sharma@example.com" -> "p***a@example.com"
+  */
 const maskEmail = (email) => {
   if (!email || typeof email !== 'string') return '[invalid-email]';
   const parts = email.split('@');
@@ -206,12 +224,12 @@ const getEtherealTransporter = async () => {
   */
 const sendEmail = async ({ to, subject, html, text, emailType = 'GENERAL' }) => {
   const maskedTo = maskEmail(to);
-  const senderAddress = process.env.EMAIL_FROM || 'AppointEase <no-reply@appointease.com>';
+  const senderAddress = process.env.EMAIL_FROM || (process.env.EMAIL_USER ? `AppointEase <${process.env.EMAIL_USER}>` : 'AppointEase <no-reply@appointease.com>');
 
   let transporter;
   try {
     transporter = getTransporter();
-    if (!transporter && !customTransporter) {
+    if (!transporter && !customTransporter && process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true') {
       transporter = await getEtherealTransporter();
     }
   } catch (initErr) {
@@ -284,6 +302,11 @@ const sendEmail = async ({ to, subject, html, text, emailType = 'GENERAL' }) => 
       recipient: maskedTo
     };
   } catch (err) {
+    const cleanMsg = err.message ? err.message.replace(/([^\s]+:[^\s]+@)/g, '***@') : 'SMTP delivery failed';
+
+    // 1. Log the raw SMTP error (err.code, err.responseCode, err.message) BEFORE any fallback runs
+    console.error(`[Email Service] PRIMARY_GMAIL_SMTP_FAILED - err.code: ${err.code || 'NONE'}, err.responseCode: ${err.responseCode || 'NONE'}, err.message: ${cleanMsg}`);
+
     // Categorize error without exposing passwords or sensitive internals
     let diagCode = 'EMAIL_DELIVERY_FAILED';
     let legacyReason = 'DELIVERY_FAILED';
@@ -298,10 +321,10 @@ const sendEmail = async ({ to, subject, html, text, emailType = 'GENERAL' }) => 
       legacyReason = 'REJECTED';
     }
 
-    console.error(`[Email Service] EMAIL_FAILED - Type: '${emailType}', Category: ${diagCode}, To: ${maskedTo}, Code: ${err.code || 'NONE'}, Notice: ${err.message}`);
+    console.error(`[Email Service] EMAIL_FAILED - Type: '${emailType}', Category: ${diagCode}, To: ${maskedTo}, Code: ${err.code || 'NONE'}, Notice: ${cleanMsg}`);
 
-    // If primary SMTP auth/connection failed, fall back to Ethereal transporter so email is never lost
-    if (transporter !== etherealTransporter) {
+    // 2. Gate automatic Ethereal fallback behind explicit env flag ALLOW_TEST_EMAIL_FALLBACK=true so it doesn't fire silently in normal use
+    if (process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true' && transporter !== etherealTransporter && !customTransporter) {
       try {
         console.log(`[Email Service] Retrying delivery via Ethereal SMTP fallback for ${maskedTo}...`);
         const fallbackTransporter = await getEtherealTransporter();
@@ -365,7 +388,109 @@ const formatDate = (dateInput) => {
 };
 
 /**
- * 1. Confirmation Email
+ * Reusable function sendConfirmationEmail(details)
+ * Sends an HTML confirmation email to details.userEmail (pulled dynamically from the booking, never hardcoded).
+ * Contains patient name, doctor name, appointment date, and time.
+ * Fixed sender is EMAIL_USER.
+ * 
+ * NOTE: Personal Gmail accounts have a sending limit of ~500 emails/day.
+ * The transporter config can easily be swapped for SendGrid/Mailgun/SES later without touching the rest of the logic.
+ * 
+ * @param {Object} details
+ * @param {string} details.userEmail - Confirming user's own email address (pulled dynamically from booking)
+ * @param {string} [details.patientName] - Patient / User name
+ * @param {string} [details.doctorName] - Doctor / Provider name
+ * @param {Date|string} [details.appointmentDate] - Appointment date
+ * @param {string} [details.time] - Appointment time / slot
+ * @param {string} [details.bookingId] - Booking reference ID
+ */
+const sendConfirmationEmail = async (details = {}) => {
+  const userEmail = details.userEmail || details.patientEmail;
+  const patientName = details.patientName || details.userName || 'Patient';
+  const doctorName = details.doctorName || details.providerName || 'Doctor';
+  const appointmentDate = details.appointmentDate || details.date;
+  const time = details.time || (details.startTime && details.endTime ? `${details.startTime} – ${details.endTime}` : (details.startTime || ''));
+  const bookingId = details.bookingId || details.appointmentId || 'N/A';
+
+  if (!userEmail) {
+    console.warn(`[Email Service] Cannot send confirmation email: missing user email for booking ID ${bookingId}`);
+    return { success: false, reason: 'NO_RECIPIENT_EMAIL' };
+  }
+
+  const formattedDate = formatDate(appointmentDate);
+  const subject = 'Appointment Booking Confirmation — Appointees';
+
+  const text = `Dear ${patientName},\n\n` +
+    `Your doctor appointment booking has been confirmed.\n\n` +
+    `Booking ID: ${bookingId}\n` +
+    `Patient Name: ${patientName}\n` +
+    `Doctor Name: ${doctorName}\n` +
+    `Appointment Date: ${formattedDate}\n` +
+    `Appointment Time: ${time}\n\n` +
+    `Thank you for choosing Appointees.`;
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; background-color: #f8fafc; border-radius: 12px;">
+      <div style="text-align: center; margin-bottom: 24px;">
+        <h1 style="color: #0d9488; margin: 0; font-size: 24px; font-weight: 800;">Appointees</h1>
+        <p style="color: #64748b; margin: 4px 0 0 0; font-size: 13px;">Doctor Appointment Booking Platform</p>
+      </div>
+      
+      <div style="background-color: #ffffff; padding: 24px; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div style="display: inline-block; padding: 4px 12px; background-color: #f0fdf4; color: #16a34a; border-radius: 9999px; font-size: 12px; font-weight: 700; margin-bottom: 12px;">
+          ✓ Confirmed Booking
+        </div>
+        
+        <h2 style="color: #0f172a; margin: 0 0 8px 0; font-size: 18px;">Hello ${patientName},</h2>
+        <p style="color: #475569; font-size: 14px; line-height: 1.5; margin: 0 0 20px 0;">
+          Your doctor appointment has been successfully confirmed. Here are your booking details:
+        </p>
+        
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 20px;">
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 10px 0; color: #64748b; width: 40%;">Booking ID</td>
+            <td style="padding: 10px 0; color: #0f172a; font-weight: 700; font-family: monospace;">${bookingId}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 10px 0; color: #64748b;">Patient Name</td>
+            <td style="padding: 10px 0; color: #0f172a; font-weight: 600;">${patientName}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 10px 0; color: #64748b;">Doctor Name</td>
+            <td style="padding: 10px 0; color: #0d9488; font-weight: 600;">${doctorName}</td>
+          </tr>
+          <tr style="border-bottom: 1px solid #f1f5f9;">
+            <td style="padding: 10px 0; color: #64748b;">Appointment Date</td>
+            <td style="padding: 10px 0; color: #0f172a; font-weight: 600;">${formattedDate}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px 0; color: #64748b;">Appointment Time</td>
+            <td style="padding: 10px 0; color: #0d9488; font-weight: 700; font-family: monospace;">${time}</td>
+          </tr>
+        </table>
+        
+        <div style="background-color: #f1f5f9; padding: 12px; border-radius: 8px; font-size: 12px; color: #475569; margin-top: 16px;">
+          <strong>Appointees Platform</strong> • Thank you for scheduling your consultation with us.
+        </div>
+      </div>
+      
+      <div style="text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8;">
+        Appointees Healthcare • Doctor Appointment Booking Platform
+      </div>
+    </div>
+  `;
+
+  return sendEmail({
+    to: userEmail,
+    subject,
+    text,
+    html,
+    emailType: 'CONFIRMATION'
+  });
+};
+
+/**
+ * 1. Confirmation Email (alias wrapper for sendConfirmationEmail)
  */
 const sendAppointmentConfirmationEmail = async ({
   patientName,
@@ -381,82 +506,13 @@ const sendAppointmentConfirmationEmail = async ({
   endTime,
   appointmentId
 }) => {
-  if (!patientEmail) return { success: false, reason: 'NO_RECIPIENT_EMAIL' };
-
-  const formattedDate = formatDate(appointmentDate);
-  const subject = 'Appointment Confirmed — AppointEase';
-
-  const text = `Dear ${patientName || 'Patient'},\n\nYour consultation appointment has been confirmed.\n\n` +
-    `Appointment Reference: ${appointmentId}\n` +
-    `Provider: ${providerName} (${providerSpecialty || 'Specialist'})\n` +
-    `Clinic Location: ${providerLocation || 'AppointEase Clinic'}\n` +
-    `Service: ${serviceName} (${serviceDuration} mins)\n` +
-    `Scheduled Date: ${formattedDate}\n` +
-    `Time Slot: ${startTime} – ${endTime}\n\n` +
-    `If you need to reschedule or cancel, please log in to your AppointEase portal at least 2 hours prior to your scheduled time.\n\n` +
-    `Thank you for choosing AppointEase.`;
-
-  const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; color: #1e293b; background-color: #f8fafc; border-radius: 12px;">
-      <div style="text-align: center; margin-bottom: 24px;">
-        <h1 style="color: #0d9488; margin: 0; font-size: 24px; font-weight: 800;">AppointEase</h1>
-        <p style="color: #64748b; margin: 4px 0 0 0; font-size: 13px;">Verified Healthcare Consultation Booking</p>
-      </div>
-      
-      <div style="background-color: #ffffff; padding: 24px; border-radius: 10px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <div style="display: inline-block; padding: 4px 12px; background-color: #f0fdf4; color: #16a34a; border-radius: 9999px; font-size: 12px; font-weight: 700; margin-bottom: 12px;">
-          ✓ Confirmed Appointment
-        </div>
-        
-        <h2 style="color: #0f172a; margin: 0 0 8px 0; font-size: 18px;">Hello ${patientName || 'Patient'},</h2>
-        <p style="color: #475569; font-size: 14px; line-height: 1.5; margin: 0 0 20px 0;">
-          Your consultation appointment has been successfully scheduled. Here are your booking details:
-        </p>
-        
-        <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 20px;">
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 0; color: #64748b; width: 40%;">Reference ID</td>
-            <td style="padding: 8px 0; color: #0f172a; font-weight: 700; font-family: monospace;">${appointmentId}</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 0; color: #64748b;">Healthcare Provider</td>
-            <td style="padding: 8px 0; color: #0f172a; font-weight: 600;">${providerName} <span style="color: #0d9488;">(${providerSpecialty || 'Specialist'})</span></td>
-          </tr>
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 0; color: #64748b;">Clinical Service</td>
-            <td style="padding: 8px 0; color: #0f172a; font-weight: 600;">${serviceName} (${serviceDuration} mins)</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 0; color: #64748b;">Date</td>
-            <td style="padding: 8px 0; color: #0f172a; font-weight: 600;">${formattedDate}</td>
-          </tr>
-          <tr style="border-bottom: 1px solid #f1f5f9;">
-            <td style="padding: 8px 0; color: #64748b;">Time Interval</td>
-            <td style="padding: 8px 0; color: #0d9488; font-weight: 700; font-family: monospace;">${startTime} – ${endTime}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #64748b;">Location</td>
-            <td style="padding: 8px 0; color: #0f172a;">${providerLocation || 'Consultation Clinic'}</td>
-          </tr>
-        </table>
-        
-        <div style="background-color: #f1f5f9; padding: 12px; border-radius: 8px; font-size: 12px; color: #475569; margin-top: 16px;">
-          <strong>Need to make changes?</strong> You can cancel or reschedule this consultation free of charge up to <strong>2 hours</strong> before the scheduled start time through your patient dashboard.
-        </div>
-      </div>
-      
-      <div style="text-align: center; margin-top: 20px; font-size: 11px; color: #94a3b8;">
-        AppointEase Healthcare • Safe, Conflict-Free Consultation Scheduling
-      </div>
-    </div>
-  `;
-
-  return sendEmail({
-    to: patientEmail,
-    subject,
-    text,
-    html,
-    emailType: 'CONFIRMATION'
+  return sendConfirmationEmail({
+    userEmail: patientEmail,
+    patientName,
+    doctorName: providerName,
+    appointmentDate,
+    time: startTime && endTime ? `${startTime} – ${endTime}` : startTime,
+    bookingId: appointmentId
   });
 };
 
@@ -774,6 +830,7 @@ const sendWelcomeEmail = async ({ userName, userEmail }) => {
 
 module.exports = {
   sendEmail,
+  sendConfirmationEmail,
   sendAppointmentConfirmationEmail,
   sendAppointmentCancellationEmail,
   sendAppointmentRescheduleEmail,

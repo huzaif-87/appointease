@@ -386,12 +386,14 @@ const bookAppointment = async ({
             endTime: newAppointment.endTime,
             status: newAppointment.status,
             provider: {
+              _id: provider._id,
               id: provider._id,
               name: provider.name,
               specialty: provider.specialty,
               location: provider.location
             },
             service: {
+              _id: service._id,
               id: service._id,
               name: service.name,
               category: service.category,
@@ -553,12 +555,14 @@ const bookAppointment = async ({
           endTime: newAppointment.endTime,
           status: newAppointment.status,
           provider: {
+            _id: provider._id,
             id: provider._id,
             name: provider.name,
             specialty: provider.specialty,
             location: provider.location
           },
           service: {
+            _id: service._id,
             id: service._id,
             name: service.name,
             category: service.category,
@@ -649,6 +653,7 @@ const getPatientAppointments = async ({ patientId, status, timeframe }) => {
       isPast,
       provider: apt.providerId
         ? {
+            _id: apt.providerId._id,
             id: apt.providerId._id,
             name: apt.providerId.name,
             specialty: apt.providerId.specialty,
@@ -657,6 +662,7 @@ const getPatientAppointments = async ({ patientId, status, timeframe }) => {
         : null,
       service: apt.serviceId
         ? {
+            _id: apt.serviceId._id,
             id: apt.serviceId._id,
             name: apt.serviceId.name,
             category: apt.serviceId.category,
@@ -780,6 +786,7 @@ const cancelAppointment = async ({ patientId, appointmentId, cancellationReason 
     endTime: appointment.endTime,
     provider: appointment.providerId
       ? {
+          _id: appointment.providerId._id,
           id: appointment.providerId._id,
           name: appointment.providerId.name,
           specialty: appointment.providerId.specialty,
@@ -788,6 +795,7 @@ const cancelAppointment = async ({ patientId, appointmentId, cancellationReason 
       : null,
     service: appointment.serviceId
       ? {
+          _id: appointment.serviceId._id,
           id: appointment.serviceId._id,
           name: appointment.serviceId.name,
           category: appointment.serviceId.category
@@ -1070,12 +1078,14 @@ const rescheduleAppointment = async ({
           endTime: updatedAppointment.endTime,
           status: updatedAppointment.status,
           provider: {
+            _id: provider._id,
             id: provider._id,
             name: provider.name,
             specialty: provider.specialty,
             location: provider.location
           },
           service: {
+            _id: service._id,
             id: service._id,
             name: service.name,
             category: service.category,
@@ -1210,12 +1220,14 @@ const rescheduleAppointment = async ({
         endTime: updatedAppointment.endTime,
         status: updatedAppointment.status,
         provider: {
+          _id: provider._id,
           id: provider._id,
           name: provider.name,
           specialty: provider.specialty,
           location: provider.location
         },
         service: {
+          _id: service._id,
           id: service._id,
           name: service.name,
           category: service.category,
@@ -1295,6 +1307,7 @@ const getAppointmentById = async ({ appointmentId, patientId }) => {
     isPast,
     provider: appointment.providerId
       ? {
+          _id: appointment.providerId._id,
           id: appointment.providerId._id,
           name: appointment.providerId.name,
           specialty: appointment.providerId.specialty,
@@ -1303,6 +1316,7 @@ const getAppointmentById = async ({ appointmentId, patientId }) => {
       : null,
     service: appointment.serviceId
       ? {
+          _id: appointment.serviceId._id,
           id: appointment.serviceId._id,
           name: appointment.serviceId.name,
           category: appointment.serviceId.category,

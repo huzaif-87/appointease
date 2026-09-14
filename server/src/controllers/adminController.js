@@ -133,9 +133,11 @@ const getAdminAppointments = asyncHandler(async (req, res) => {
   );
 });
 
+const { sendConfirmationEmail } = require('../services/emailService');
+
 /**
  * @route   PATCH /api/admin/appointments/:id/status
- * @desc    Update appointment status (COMPLETED, NO_SHOW, CANCELLED) with audit logging
+ * @desc    Update appointment status (CONFIRMED, COMPLETED, NO_SHOW, CANCELLED) with audit logging
  * @access  Private (ADMIN only)
  */
 const updateAdminAppointmentStatus = asyncHandler(async (req, res) => {
@@ -169,6 +171,26 @@ const updateAdminAppointmentStatus = asyncHandler(async (req, res) => {
     .populate('providerId', 'name specialty location')
     .populate('serviceId', 'name category price durationMinutes')
     .lean();
+
+  // If status is updated to CONFIRMED, send automatic confirmation email to linked user
+  if (targetStatus === 'CONFIRMED') {
+    try {
+      if (updated?.userId?.email) {
+        await sendConfirmationEmail({
+          userEmail: updated.userId.email,
+          patientName: updated.userId.name || 'Patient',
+          doctorName: updated.providerId?.name || 'Doctor',
+          appointmentDate: updated.appointmentDate,
+          time: `${updated.startTime} – ${updated.endTime}`,
+          bookingId: updated.appointmentId || updated._id.toString()
+        });
+      } else {
+        console.warn(`[Booking Confirmation] No email found for linked user in booking ${updated.appointmentId || id}`);
+      }
+    } catch (emailErr) {
+      console.error(`[Booking Confirmation] Failed to send confirmation email for booking ${updated.appointmentId || id}:`, emailErr.message);
+    }
+  }
 
   return ApiResponse.success(
     res,

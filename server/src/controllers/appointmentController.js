@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const ApiResponse = require('../utils/apiResponse');
 const asyncHandler = require('../utils/asyncHandler');
 const {
@@ -232,11 +233,87 @@ const rescheduleAppointmentHandler = asyncHandler(async (req, res) => {
   }
 });
 
+const { sendConfirmationEmail } = require('../services/emailService');
+const { Appointment } = require('../models');
+
+/**
+ * @route   PATCH /api/appointments/:id/confirm
+ * @route   POST /api/appointments/booking-confirmation
+ * @desc    Confirm booking status and send per-user automatic HTML confirmation email
+ * @access  Private
+ */
+const confirmBookingHandler = asyncHandler(async (req, res) => {
+  const targetId = req.params.id || req.body.bookingId || req.body.appointmentId;
+  if (!targetId) {
+    return ApiResponse.error(res, 'Booking ID or appointment ID is required', 400);
+  }
+
+  // Locate appointment document safely by ObjectId or string appointmentId
+  const isObjectId = mongoose.Types.ObjectId.isValid(targetId);
+  const query = isObjectId ? { $or: [{ _id: targetId }, { appointmentId: targetId }] } : { appointmentId: targetId };
+  const appointment = await Appointment.findOne(query);
+
+  if (!appointment) {
+    return ApiResponse.error(res, 'Booking document not found', 404);
+  }
+
+  // Update booking status to confirmed
+  appointment.status = 'CONFIRMED';
+  await appointment.save();
+
+  // Populate linked user field to retrieve specific user's email and name dynamically
+  const confirmedBooking = await Appointment.findById(appointment._id)
+    .populate('userId', 'name email')
+    .populate('providerId', 'name specialty location')
+    .populate('serviceId', 'name category price durationMinutes')
+    .lean();
+
+  const bookingId = confirmedBooking.appointmentId || confirmedBooking._id.toString();
+  const userEmail = confirmedBooking.userId?.email;
+  const patientName = confirmedBooking.userId?.name || 'Patient';
+  const doctorName = confirmedBooking.providerId?.name || 'Doctor';
+  const appointmentDate = confirmedBooking.appointmentDate;
+  const time = confirmedBooking.startTime && confirmedBooking.endTime
+    ? `${confirmedBooking.startTime} – ${confirmedBooking.endTime}`
+    : confirmedBooking.startTime;
+
+  // Wrap email call in try/catch so a failed send never blocks the booking confirmation itself; log error with booking ID
+  let emailSent = false;
+  try {
+    if (userEmail) {
+      const emailRes = await sendConfirmationEmail({
+        userEmail,
+        patientName,
+        doctorName,
+        appointmentDate,
+        time,
+        bookingId
+      });
+      emailSent = emailRes?.success || false;
+    } else {
+      console.warn(`[Booking Confirmation] No email address found for linked user in booking ID ${bookingId}`);
+    }
+  } catch (emailErr) {
+    console.error(`[Booking Confirmation] Failed to send confirmation email for booking ID ${bookingId}:`, emailErr.message);
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: 'Booking status updated to confirmed successfully',
+    data: {
+      appointment: confirmedBooking,
+      emailSent
+    }
+  });
+});
+
 module.exports = {
   createAppointment,
   getMyAppointments,
   getAppointmentDetailsHandler,
   cancelAppointmentHandler,
-  rescheduleAppointmentHandler
+  rescheduleAppointmentHandler,
+  confirmBookingHandler
 };
+
 

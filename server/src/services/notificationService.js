@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { Notification, User } = require('../models');
 const {
+  sendConfirmationEmail,
   sendAppointmentConfirmationEmail,
   sendAppointmentCancellationEmail,
   sendAppointmentRescheduleEmail
@@ -94,22 +95,16 @@ const notifyAppointmentConfirmed = async ({
     let emailResult = null;
     if (patientEmail) {
       try {
-        emailResult = await sendAppointmentConfirmationEmail({
+        emailResult = await sendConfirmationEmail({
+          userEmail: patientEmail,
           patientName,
-          patientEmail,
-          providerName,
-          providerSpecialty,
-          providerLocation,
-          serviceName,
-          serviceDuration,
-          servicePrice,
+          doctorName: providerName,
           appointmentDate,
-          startTime,
-          endTime,
-          appointmentId
+          time: startTime && endTime ? `${startTime} – ${endTime}` : startTime,
+          bookingId: appointmentId || appointment._id?.toString()
         });
       } catch (emailErr) {
-        console.error('[Notification Service] Confirmation email failed:', emailErr.message);
+        console.error(`[Booking Confirmation] Confirmation email failed for booking ID ${appointmentId || appointment._id}:`, emailErr.message);
         emailResult = { success: false, code: 'EMAIL_DELIVERY_FAILED', reason: emailErr.message };
       }
     }
