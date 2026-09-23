@@ -17,70 +17,41 @@
  */
 
 const nodemailer = require('nodemailer');
-const dns = require('dns');
-
-// Force IPv4 DNS resolution — avoids ENETUNREACH on hosts with no outbound IPv6 route
-try {
-  dns.setDefaultResultOrder('ipv4first');
-} catch (e) {}
-
-// Custom IPv4-only lookup function for Nodemailer to guarantee IPv4 on Linux/Render containers
-function ipv4Lookup(hostname, options, callback) {
-  if (typeof options === 'function') {
-    callback = options;
-    options = {};
-  }
-  return dns.lookup(hostname, Object.assign({}, options, { family: 4 }), callback);
-}
-
-async function resolveIPv4Host(hostname) {
-  if (!hostname || /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
-    return hostname;
-  }
-  try {
-    const addresses = await dns.promises.resolve4(hostname);
-    if (addresses && addresses.length > 0) {
-      return addresses[0];
-    }
-  } catch (err) {
-    console.warn(`[Email Service] IPv4 DNS resolution for ${hostname} fallback notice:`, err.message);
-  }
-  return hostname;
-}
-
 let transporter = null;
 
-async function getTransporter() {
+function getTransporter() {
   if (transporter) return transporter;
 
-  const { EMAIL_USER, EMAIL_APP_PASSWORD } = process.env;
+  const { EMAIL_USER, EMAIL_APP_PASSWORD, EMAIL_HOST, EMAIL_PORT, EMAIL_SECURE, EMAIL_FAMILY } = process.env;
 
   if (!EMAIL_USER || !EMAIL_APP_PASSWORD) {
     throw new Error('EMAIL_USER and EMAIL_APP_PASSWORD must be set in environment variables');
   }
 
-  const rawHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
-  const targetHost = await resolveIPv4Host(rawHost);
-  const port = parseInt(process.env.EMAIL_PORT, 10) || 587;
-  const secure = process.env.EMAIL_SECURE === 'true' || port === 465;
+  const host = EMAIL_HOST || 'smtp.gmail.com';
+  const port = parseInt(EMAIL_PORT, 10) || 587;
+  const secure = EMAIL_SECURE === 'true' || port === 465;
+  const family = EMAIL_FAMILY !== undefined ? parseInt(EMAIL_FAMILY, 10) : 0;
 
-  transporter = nodemailer.createTransport({
-    host: targetHost,
+  const transportOpts = {
+    host,
     port,
-    secure, // false for 587
+    secure,
     requireTLS: !secure,
-    family: 4, // force IPv4 — avoids ENETUNREACH / timeouts on cloud hosts
-    tls: {
-      servername: rawHost, // SNI servername for SSL cert validation when host is an IP
-    },
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_APP_PASSWORD,
     },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-  });
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 20000,
+  };
+
+  if (family === 4 || family === 6) {
+    transportOpts.family = family;
+  }
+
+  transporter = nodemailer.createTransport(transportOpts);
 
   return transporter;
 }
@@ -92,8 +63,7 @@ async function getTransporter() {
  */
 async function verifyEmailConfig() {
   try {
-    const activeTransporter = await getTransporter();
-    await activeTransporter.verify();
+    await getTransporter().verify();
     console.log('[Email Service] Gmail SMTP verified — ready to send.');
     return true;
   } catch (err) {
@@ -175,8 +145,7 @@ async function sendEmail({ to, subject, html, text }) {
   const maskedTo = maskEmail(to);
 
   try {
-    const activeTransporter = await getTransporter();
-    const info = await activeTransporter.sendMail({
+    const info = await getTransporter().sendMail({
       from: process.env.EMAIL_FROM || `Appointees <${process.env.EMAIL_USER}>`,
       to,
       subject,
