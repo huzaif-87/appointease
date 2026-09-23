@@ -15,6 +15,10 @@ const {
   notifyAppointmentCancelled,
   notifyAppointmentRescheduled
 } = require('./notificationService');
+const {
+  sendRescheduleConfirmationEmail,
+  sendCancellationEmail
+} = require('./emailService');
 
 const CANCELLATION_WINDOW_MINUTES = parseInt(process.env.CANCELLATION_WINDOW_MINUTES, 10) || 120;
 const RESCHEDULE_WINDOW_MINUTES = parseInt(process.env.RESCHEDULE_WINDOW_MINUTES, 10) || 120;
@@ -773,8 +777,31 @@ const cancelAppointment = async ({ patientId, appointmentId, cancellationReason 
   appointment.cancelledAt = new Date();
   await appointment.save();
 
+  await appointment.populate('userId', 'name email');
   await appointment.populate('providerId', 'name specialty location consultationDuration');
   await appointment.populate('serviceId', 'name category durationMinutes price');
+
+  const cancelBookingId = appointment.appointmentId || appointment._id.toString();
+  const cancelUserEmail = appointment.userId?.email;
+  const cancelPatientName = appointment.userId?.name || 'Patient';
+  const cancelDoctorName = appointment.providerId?.name || 'Doctor';
+  const cancelTime = appointment.startTime && appointment.endTime
+    ? `${appointment.startTime} – ${appointment.endTime}`
+    : appointment.startTime;
+
+  sendCancellationEmail({
+    userEmail: cancelUserEmail,
+    patientName: cancelPatientName,
+    doctorName: cancelDoctorName,
+    appointmentDate: appointment.appointmentDate,
+    time: cancelTime,
+    bookingId: cancelBookingId,
+    cancellationReason: appointment.cancellationReason
+  }).then((res) => {
+    console.log(`[Cancellation Route] Email result for booking ID ${cancelBookingId}:`, res);
+  }).catch((err) => {
+    console.error(`[Cancellation Route] Error sending email for booking ID ${cancelBookingId}:`, err.message);
+  });
 
   const cancellationResult = {
     appointmentId: appointment.appointmentId,
@@ -1066,8 +1093,30 @@ const rescheduleAppointment = async ({
           },
           { new: true, session }
         )
+          .populate('userId', 'name email')
           .populate('providerId', 'name specialty location')
           .populate('serviceId', 'name category durationMinutes price');
+
+        const txRescheduleBookingId = updatedAppointment.appointmentId || updatedAppointment._id.toString();
+        const txRescheduleUserEmail = updatedAppointment.userId?.email;
+        const txReschedulePatientName = updatedAppointment.userId?.name || 'Patient';
+        const txRescheduleDoctorName = updatedAppointment.providerId?.name || provider.name || 'Doctor';
+        const txRescheduleTime = updatedAppointment.startTime && updatedAppointment.endTime
+          ? `${updatedAppointment.startTime} – ${updatedAppointment.endTime}`
+          : updatedAppointment.startTime;
+
+        sendRescheduleConfirmationEmail({
+          userEmail: txRescheduleUserEmail,
+          patientName: txReschedulePatientName,
+          doctorName: txRescheduleDoctorName,
+          appointmentDate: updatedAppointment.appointmentDate,
+          time: txRescheduleTime,
+          bookingId: txRescheduleBookingId
+        }).then((res) => {
+          console.log(`[Reschedule Route] Email result for booking ID ${txRescheduleBookingId}:`, res);
+        }).catch((err) => {
+          console.error(`[Reschedule Route] Error sending email for booking ID ${txRescheduleBookingId}:`, err.message);
+        });
 
         await session.commitTransaction();
 
@@ -1210,8 +1259,30 @@ const rescheduleAppointment = async ({
         },
         { new: true }
       )
+        .populate('userId', 'name email')
         .populate('providerId', 'name specialty location')
         .populate('serviceId', 'name category durationMinutes price');
+
+      const standaloneRescheduleBookingId = updatedAppointment.appointmentId || updatedAppointment._id.toString();
+      const standaloneRescheduleUserEmail = updatedAppointment.userId?.email;
+      const standaloneReschedulePatientName = updatedAppointment.userId?.name || 'Patient';
+      const standaloneRescheduleDoctorName = updatedAppointment.providerId?.name || provider.name || 'Doctor';
+      const standaloneRescheduleTime = updatedAppointment.startTime && updatedAppointment.endTime
+        ? `${updatedAppointment.startTime} – ${updatedAppointment.endTime}`
+        : updatedAppointment.startTime;
+
+      sendRescheduleConfirmationEmail({
+        userEmail: standaloneRescheduleUserEmail,
+        patientName: standaloneReschedulePatientName,
+        doctorName: standaloneRescheduleDoctorName,
+        appointmentDate: updatedAppointment.appointmentDate,
+        time: standaloneRescheduleTime,
+        bookingId: standaloneRescheduleBookingId
+      }).then((res) => {
+        console.log(`[Reschedule Route] Email result for booking ID ${standaloneRescheduleBookingId}:`, res);
+      }).catch((err) => {
+        console.error(`[Reschedule Route] Error sending email for booking ID ${standaloneRescheduleBookingId}:`, err.message);
+      });
 
       const rescheduleResult = {
         appointmentId: updatedAppointment.appointmentId,

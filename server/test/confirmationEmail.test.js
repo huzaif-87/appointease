@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const { app } = require('../src/server');
 const { connectDB } = require('../src/config/db');
 const { User, Provider, Service, Availability, Appointment } = require('../src/models');
-const { setTransporter, resetTransporter, sendConfirmationEmail } = require('../src/services/emailService');
+const { setTransporter, resetTransporter, sendBookingConfirmationEmail } = require('../src/services/emailService');
 
 const runConfirmationEmailTests = async () => {
   console.log('====================================================');
@@ -95,7 +95,7 @@ const runConfirmationEmailTests = async () => {
     console.log('\n--- 1. Direct sendConfirmationEmail(details) Unit Test ---');
     interceptedEmails.length = 0;
 
-    const directEmailRes = await sendConfirmationEmail({
+    const directEmailRes = await sendBookingConfirmationEmail({
       userEmail: patientUser1.email,
       patientName: patientUser1.name,
       doctorName: providerDoc.name,
@@ -104,7 +104,7 @@ const runConfirmationEmailTests = async () => {
       bookingId: 'APT-TEST-001'
     });
 
-    assert('T1-1', 'sendConfirmationEmail returns success', directEmailRes.success === true);
+    assert('T1-1', 'sendBookingConfirmationEmail returns success', directEmailRes.success === true);
     assert('T1-2', 'Email was dispatched to mock transporter', interceptedEmails.length === 1);
     
     const intercepted1 = interceptedEmails[0];

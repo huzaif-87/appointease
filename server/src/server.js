@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const { connectDB } = require('./config/db');
-const { verifySmtpConnection } = require('./services/emailService');
+const { verifyEmailConfig } = require('./services/emailService');
 const errorHandler = require('./middleware/errorHandler');
 const notFoundHandler = require('./middleware/notFoundHandler');
 const apiRoutes = require('./routes');
@@ -90,17 +90,15 @@ const startServer = async () => {
     console.log('[Server] Initializing database connection...');
     await connectDB();
 
-    // Safe startup SMTP verification (asynchronous, never blocks or crashes server)
-    verifySmtpConnection().catch((smtpErr) => {
-      console.error('[Server] Startup SMTP verification notice:', smtpErr.message);
-    });
-
-    const server = app.listen(PORT, HOST, () => {
+    const server = app.listen(PORT, HOST, async () => {
       console.log(`=========================================`);
       console.log(` AppointEase Server running on http://${HOST}:${PORT}`);
       console.log(` Health check: http://${HOST}:${PORT}/api/health`);
       console.log(` Environment:  ${process.env.NODE_ENV || 'development'}`);
       console.log(`=========================================`);
+
+      const emailConfigOk = await verifyEmailConfig();
+      console.log(`[Server] Email configuration verification result: ${emailConfigOk ? 'SUCCESS' : 'FAILED'}`);
     });
 
     // Graceful shutdown handling

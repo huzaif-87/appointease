@@ -233,7 +233,11 @@ const rescheduleAppointmentHandler = asyncHandler(async (req, res) => {
   }
 });
 
-const { sendConfirmationEmail } = require('../services/emailService');
+const {
+  sendBookingConfirmationEmail,
+  sendRescheduleConfirmationEmail,
+  sendCancellationEmail
+} = require('../services/emailService');
 const { Appointment } = require('../models');
 
 /**
@@ -277,11 +281,10 @@ const confirmBookingHandler = asyncHandler(async (req, res) => {
     ? `${confirmedBooking.startTime} – ${confirmedBooking.endTime}`
     : confirmedBooking.startTime;
 
-  // Wrap email call in try/catch so a failed send never blocks the booking confirmation itself; log error with booking ID
-  let emailSent = false;
+  let emailResult = { success: false, error: 'NO_RECIPIENT_EMAIL' };
   try {
     if (userEmail) {
-      const emailRes = await sendConfirmationEmail({
+      emailResult = await sendBookingConfirmationEmail({
         userEmail,
         patientName,
         doctorName,
@@ -289,12 +292,13 @@ const confirmBookingHandler = asyncHandler(async (req, res) => {
         time,
         bookingId
       });
-      emailSent = emailRes?.success || false;
+      console.log(`[Booking Confirmation Route] Email result for booking ID ${bookingId}:`, emailResult);
     } else {
-      console.warn(`[Booking Confirmation] No email address found for linked user in booking ID ${bookingId}`);
+      console.warn(`[Booking Confirmation Route] No email address found for linked user in booking ID ${bookingId}`);
     }
   } catch (emailErr) {
-    console.error(`[Booking Confirmation] Failed to send confirmation email for booking ID ${bookingId}:`, emailErr.message);
+    console.error(`[Booking Confirmation Route] Unexpected error sending email for booking ID ${bookingId}:`, emailErr.message);
+    emailResult = { success: false, error: emailErr.message };
   }
 
   return res.status(200).json({
@@ -302,7 +306,7 @@ const confirmBookingHandler = asyncHandler(async (req, res) => {
     message: 'Booking status updated to confirmed successfully',
     data: {
       appointment: confirmedBooking,
-      emailSent
+      emailSent: emailResult?.success || false
     }
   });
 });

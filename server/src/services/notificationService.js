@@ -1,10 +1,9 @@
 const mongoose = require('mongoose');
 const { Notification, User } = require('../models');
 const {
-  sendConfirmationEmail,
-  sendAppointmentConfirmationEmail,
-  sendAppointmentCancellationEmail,
-  sendAppointmentRescheduleEmail
+  sendBookingConfirmationEmail,
+  sendRescheduleConfirmationEmail,
+  sendCancellationEmail
 } = require('./emailService');
 
 /**
@@ -95,7 +94,7 @@ const notifyAppointmentConfirmed = async ({
     let emailResult = null;
     if (patientEmail) {
       try {
-        emailResult = await sendConfirmationEmail({
+        emailResult = await sendBookingConfirmationEmail({
           userEmail: patientEmail,
           patientName,
           doctorName: providerName,
@@ -157,14 +156,13 @@ const notifyAppointmentCancelled = async ({
     let emailResult = null;
     if (patientEmail) {
       try {
-        emailResult = await sendAppointmentCancellationEmail({
+        emailResult = await sendCancellationEmail({
+          userEmail: patientEmail,
           patientName,
-          patientEmail,
-          providerName,
-          serviceName,
+          doctorName: providerName,
           appointmentDate,
-          startTime,
-          appointmentId,
+          time: startTime,
+          bookingId: appointmentId || appointment._id?.toString(),
           cancellationReason
         });
       } catch (err) {
@@ -224,17 +222,13 @@ const notifyAppointmentRescheduled = async ({
     let emailResult = null;
     if (patientEmail) {
       try {
-        emailResult = await sendAppointmentRescheduleEmail({
+        emailResult = await sendRescheduleConfirmationEmail({
+          userEmail: patientEmail,
           patientName,
-          patientEmail,
-          providerName,
-          serviceName,
-          previousDate,
-          previousStartTime,
-          newDate,
-          newStartTime,
-          newEndTime,
-          appointmentId
+          doctorName: providerName,
+          appointmentDate: newDate,
+          time: newStartTime && newEndTime ? `${newStartTime} – ${newEndTime}` : newStartTime,
+          bookingId: appointmentId || appointment._id?.toString()
         });
       } catch (err) {
         console.error('[Notification Service] Reschedule email failed:', err.message);
