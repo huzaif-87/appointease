@@ -20,7 +20,18 @@ const nodemailer = require('nodemailer');
 const dns = require('dns');
 
 // Force IPv4 DNS resolution — avoids ENETUNREACH on hosts with no outbound IPv6 route
-dns.setDefaultResultOrder('ipv4first');
+try {
+  dns.setDefaultResultOrder('ipv4first');
+} catch (e) {}
+
+// Custom IPv4-only lookup function for Nodemailer to guarantee IPv4 on Linux/Render containers
+function ipv4Lookup(hostname, options, callback) {
+  if (typeof options === 'function') {
+    callback = options;
+    options = {};
+  }
+  return dns.lookup(hostname, Object.assign({}, options, { family: 4 }), callback);
+}
 
 let transporter = null;
 
@@ -42,6 +53,7 @@ function getTransporter() {
     port,
     secure, // false for 587
     requireTLS: !secure,
+    lookup: ipv4Lookup,
     family: 4, // force IPv4 — avoids ENETUNREACH / timeouts on cloud hosts
     auth: {
       user: EMAIL_USER,
