@@ -50,4 +50,32 @@ router.delete('/availabilities/:id', deleteAdminAvailability);
 router.get('/users', getAdminUsers);
 router.patch('/users/:id', updateAdminUser);
 
+// ── TEMP: Email delivery test ─────────────────────────────────────────────────
+// POST /api/admin/test-email  { to, patientName?, doctorName? }
+// Sends a real booking-confirmation email via Resend so you can verify the
+// integration end-to-end from the Admin portal. DELETE this route when done.
+router.post('/test-email', async (req, res) => {
+  const { sendBookingConfirmationEmail } = require('../services/emailService');
+  const { to, patientName = 'Test Patient', doctorName = 'Dr. Test Doctor' } = req.body;
+
+  if (!to) {
+    return res.status(400).json({ success: false, message: '"to" email address is required' });
+  }
+
+  const result = await sendBookingConfirmationEmail({
+    userEmail: to,
+    patientName,
+    doctorName,
+    appointmentDate: new Date(),
+    time: '10:30 AM',
+    bookingId: 'TEST-' + Date.now(),
+  });
+
+  if (result.success) {
+    return res.json({ success: true, message: `Test email sent to ${to}`, messageId: result.messageId });
+  }
+  return res.status(500).json({ success: false, message: result.error || 'Email send failed' });
+});
+// ── END TEMP ─────────────────────────────────────────────────────────────────
+
 module.exports = router;

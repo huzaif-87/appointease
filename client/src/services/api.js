@@ -304,4 +304,11 @@ export const markAllNotificationsAsRead = async () => {
   return response.data;
 };
 
+// ── TEMP: Email delivery test ─────────────────────────────────────────────────
+export const sendAdminTestEmail = async ({ to, patientName, doctorName }) => {
+  const response = await api.post('/admin/test-email', { to, patientName, doctorName });
+  return response.data;
+};
+// ── END TEMP ─────────────────────────────────────────────────────────────────
+
 export default api;
