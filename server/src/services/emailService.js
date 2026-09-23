@@ -17,12 +17,17 @@
  */
 
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+
 let transporter = null;
 
 function getTransporter() {
   if (transporter) return transporter;
 
   const { EMAIL_USER, EMAIL_APP_PASSWORD, EMAIL_HOST, EMAIL_PORT, EMAIL_SECURE, EMAIL_FAMILY } = process.env;
+
+  // Debug: confirm EMAIL_FAMILY is being read correctly on Render
+  console.log('[Email Service] EMAIL_FAMILY env value:', EMAIL_FAMILY, typeof EMAIL_FAMILY);
 
   if (!EMAIL_USER || !EMAIL_APP_PASSWORD) {
     throw new Error('EMAIL_USER and EMAIL_APP_PASSWORD must be set in environment variables');
@@ -31,13 +36,17 @@ function getTransporter() {
   const host = EMAIL_HOST || 'smtp.gmail.com';
   const port = parseInt(EMAIL_PORT, 10) || 587;
   const secure = EMAIL_SECURE === 'true' || port === 465;
-  const family = EMAIL_FAMILY !== undefined ? parseInt(EMAIL_FAMILY, 10) : 0;
 
   const transportOpts = {
     host,
     port,
     secure,
     requireTLS: !secure,
+    // Explicit IPv4 DNS lookup — prevents ENETUNREACH on IPv6-resolved smtp.gmail.com on Render
+    family: 4,
+    lookup: (hostname, options, callback) => {
+      dns.lookup(hostname, { family: 4 }, callback);
+    },
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_APP_PASSWORD,
@@ -46,10 +55,6 @@ function getTransporter() {
     greetingTimeout: 15000,
     socketTimeout: 20000,
   };
-
-  if (family === 4 || family === 6) {
-    transportOpts.family = family;
-  }
 
   transporter = nodemailer.createTransport(transportOpts);
 
