@@ -1,80 +1,65 @@
 /**
- * Appointees — Email Service (Gmail SMTP via Nodemailer)
- * Clean, production-ready version — built from scratch to replace fragile setups.
+ * Appointees — Email Service (Resend HTTP API)
+ *
+ * Uses the Resend HTTP API instead of SMTP — works reliably on Render
+ * because it's outbound HTTPS (port 443), never blocked like SMTP 587/465.
  *
  * Required environment variables:
- *   EMAIL_USER          - your Gmail address (the sender)
- *   EMAIL_APP_PASSWORD  - 16-character Gmail App Password (NOT your login password)
- *                          Generate at: myaccount.google.com/apppasswords
- *                          (requires 2-Step Verification enabled)
+ *   RESEND_API_KEY  - API key from resend.com (starts with "re_")
+ *   EMAIL_FROM      - Verified sender address, e.g. "Appointees <you@yourdomain.com>"
+ *                     For testing without a custom domain, use Resend's shared domain:
+ *                     "Appointees <onboarding@resend.dev>"
+ *                     NOTE: onboarding@resend.dev can only send to the account owner's
+ *                     email. Verify a custom domain at resend.com/domains for
+ *                     unrestricted sending.
  *
  * Optional:
- *   EMAIL_FROM                  - display name, e.g. "Appointees <you@gmail.com>"
- *   ALLOW_TEST_EMAIL_FALLBACK   - "true" only for local dev. If the real Gmail
- *                                 send fails, falls back to Ethereal and logs
- *                                 it CLEARLY as a fallback (never silently).
- *                                 Leave unset/false in production.
+ *   ALLOW_TEST_EMAIL_FALLBACK - "true" for local dev. Falls back to Ethereal (nodemailer)
+ *                               if Resend send fails. Leave unset in production.
  */
 
-const nodemailer = require('nodemailer');
-const dns = require('dns');
+const { Resend } = require('resend');
+const nodemailer = require('nodemailer'); // kept only for ALLOW_TEST_EMAIL_FALLBACK
 
-let transporter = null;
+let _resend = null;
 
-function getTransporter() {
-  if (transporter) return transporter;
-
-  const { EMAIL_USER, EMAIL_APP_PASSWORD, EMAIL_HOST, EMAIL_PORT, EMAIL_SECURE, EMAIL_FAMILY } = process.env;
-
-  // Debug: confirm EMAIL_FAMILY is being read correctly on Render
-  console.log('[Email Service] EMAIL_FAMILY env value:', EMAIL_FAMILY, typeof EMAIL_FAMILY);
-
-  if (!EMAIL_USER || !EMAIL_APP_PASSWORD) {
-    throw new Error('EMAIL_USER and EMAIL_APP_PASSWORD must be set in environment variables');
+function getResend() {
+  if (_resend) return _resend;
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY must be set in environment variables');
   }
-
-  const host = EMAIL_HOST || 'smtp.gmail.com';
-  const port = parseInt(EMAIL_PORT, 10) || 587;
-  const secure = EMAIL_SECURE === 'true' || port === 465;
-
-  const transportOpts = {
-    host,
-    port,
-    secure,
-    requireTLS: !secure,
-    // Explicit IPv4 DNS lookup — prevents ENETUNREACH on IPv6-resolved smtp.gmail.com on Render
-    family: 4,
-    lookup: (hostname, options, callback) => {
-      dns.lookup(hostname, { family: 4 }, callback);
-    },
-    auth: {
-      user: EMAIL_USER,
-      pass: EMAIL_APP_PASSWORD,
-    },
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 20000,
-  };
-
-  transporter = nodemailer.createTransport(transportOpts);
-
-  return transporter;
+  _resend = new Resend(apiKey);
+  return _resend;
 }
 
 /**
- * Call this ONCE when your server boots (e.g. in server.js / app.js after
- * dotenv loads). Surfaces config problems immediately instead of on the
- * first real booking.
+ * Call this ONCE when your server boots to surface config problems early.
+ * Resend has no persistent connection to verify, so this validates the API key
+ * is present and does a lightweight API call (list domains) to confirm it works.
  */
 async function verifyEmailConfig() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error('[Email Service] Resend verification FAILED: RESEND_API_KEY is not set');
+    return false;
+  }
   try {
-    await getTransporter().verify();
-    console.log('[Email Service] Gmail SMTP verified — ready to send.');
+    // Lightweight check — list domains to confirm the API key is valid
+    const resend = getResend();
+    const { data, error } = await resend.domains.list();
+    if (error) {
+      console.error('[Email Service] Resend API key validation FAILED:', {
+        name: error.name,
+        message: error.message,
+      });
+      return false;
+    }
+    console.log('[Email Service] Resend API verified — ready to send. Domains:', (data?.data || []).map(d => d.name));
     return true;
   } catch (err) {
-    console.error('[Email Service] Gmail SMTP verification FAILED:', {
+    console.error('[Email Service] Resend verification FAILED:', {
       code: err.code,
-      responseCode: err.responseCode,
       message: err.message,
     });
     return false;
@@ -141,49 +126,75 @@ function buildEmailHtml({ status, patientName, doctorName, date, time, bookingId
 }
 
 /**
- * Core sender. Never throws — always returns a result object so a failed
- * email never breaks the booking/reschedule/cancel flow that called it.
- * Real errors are always logged; fallback (if enabled) is always labeled
- * clearly and never reported as a normal success.
+ * Core sender via Resend HTTP API.
+ * Never throws — always returns { success, messageId } or { success: false, error }.
+ * A failed send never blocks booking/reschedule/cancel operations.
  */
 async function sendEmail({ to, subject, html, text }) {
   const maskedTo = maskEmail(to);
+  const from = process.env.EMAIL_FROM || 'Appointees <onboarding@resend.dev>';
 
   try {
-    const info = await getTransporter().sendMail({
-      from: process.env.EMAIL_FROM || `Appointees <${process.env.EMAIL_USER}>`,
-      to,
+    const resend = getResend();
+    const { data, error } = await resend.emails.send({
+      from,
+      to: [to],
       subject,
-      text,
       html,
+      text,
     });
-    console.log(`[Email Service] Sent OK — To: ${maskedTo}, MessageID: ${info.messageId}`);
-    return { success: true, messageId: info.messageId };
+
+    if (error) {
+      // Resend returns errors in the response body (not thrown), handle as failure
+      console.error(`[Email Service] SEND FAILED — To: ${maskedTo}`, {
+        name: error.name,
+        message: error.message,
+      });
+
+      if (process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true') {
+        return await etherealFallback({ to, subject, html, text });
+      }
+
+      return { success: false, error: error.message, code: error.name };
+    }
+
+    console.log(`[Email Service] Sent OK via Resend — To: ${maskedTo}, MessageID: ${data.id}`);
+    return { success: true, messageId: data.id };
   } catch (err) {
     console.error(`[Email Service] SEND FAILED — To: ${maskedTo}`, {
       code: err.code,
-      responseCode: err.responseCode,
       message: err.message,
     });
 
     if (process.env.ALLOW_TEST_EMAIL_FALLBACK === 'true') {
-      try {
-        const testAccount = await nodemailer.createTestAccount();
-        const testTransport = nodemailer.createTransport({
-          host: 'smtp.ethereal.email',
-          port: 587,
-          secure: false,
-          auth: { user: testAccount.user, pass: testAccount.pass },
-        });
-        const info = await testTransport.sendMail({ from: testAccount.user, to, subject, text, html });
-        console.warn(`[Email Service] DEV FALLBACK used (Ethereal, not real delivery) — Preview: ${nodemailer.getTestMessageUrl(info)}`);
-        return { success: true, isFallback: true, previewUrl: nodemailer.getTestMessageUrl(info) };
-      } catch (fallbackErr) {
-        console.error('[Email Service] Fallback also failed:', fallbackErr.message);
-      }
+      return await etherealFallback({ to, subject, html, text });
     }
 
     return { success: false, error: err.message, code: err.code };
+  }
+}
+
+/**
+ * Ethereal (Nodemailer) dev fallback.
+ * Only invoked when ALLOW_TEST_EMAIL_FALLBACK=true and Resend send fails.
+ * Always clearly labeled in logs — never silently reports as a real success.
+ */
+async function etherealFallback({ to, subject, html, text }) {
+  try {
+    const testAccount = await nodemailer.createTestAccount();
+    const testTransport = nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: { user: testAccount.user, pass: testAccount.pass },
+    });
+    const info = await testTransport.sendMail({ from: testAccount.user, to, subject, text, html });
+    const previewUrl = nodemailer.getTestMessageUrl(info);
+    console.warn(`[Email Service] DEV FALLBACK used (Ethereal, not real delivery) — Preview: ${previewUrl}`);
+    return { success: true, isFallback: true, previewUrl };
+  } catch (fallbackErr) {
+    console.error('[Email Service] Ethereal fallback also failed:', fallbackErr.message);
+    return { success: false, error: fallbackErr.message, code: 'FALLBACK_FAILED' };
   }
 }
 
@@ -223,13 +234,11 @@ async function sendCancellationEmail(booking) {
   });
 }
 
-function setTransporter(t) {
-  transporter = t;
-}
-
-function resetTransporter() {
-  transporter = null;
-}
+// Test/dev hooks — used by the test suite to inject a mock transporter.
+// Note: setTransporter/resetTransporter are no longer used for Resend,
+// but kept in the exports so existing test files don't break at import time.
+function setTransporter(t) { /* no-op for Resend — mocking is done at the Resend SDK level */ }
+function resetTransporter() { /* no-op for Resend */ }
 
 module.exports = {
   verifyEmailConfig,
