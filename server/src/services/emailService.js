@@ -35,8 +35,9 @@ function getResend() {
 
 /**
  * Call this ONCE when your server boots to surface config problems early.
- * Resend has no persistent connection to verify, so this validates the API key
- * is present and does a lightweight API call (list domains) to confirm it works.
+ * Validates that RESEND_API_KEY is present and has the expected format.
+ * Resend sending-only API keys cannot list domains, so we skip that call
+ * and just confirm the key is set — the first real send will catch bad keys.
  */
 async function verifyEmailConfig() {
   const apiKey = process.env.RESEND_API_KEY;
@@ -44,26 +45,13 @@ async function verifyEmailConfig() {
     console.error('[Email Service] Resend verification FAILED: RESEND_API_KEY is not set');
     return false;
   }
-  try {
-    // Lightweight check — list domains to confirm the API key is valid
-    const resend = getResend();
-    const { data, error } = await resend.domains.list();
-    if (error) {
-      console.error('[Email Service] Resend API key validation FAILED:', {
-        name: error.name,
-        message: error.message,
-      });
-      return false;
-    }
-    console.log('[Email Service] Resend API verified — ready to send. Domains:', (data?.data || []).map(d => d.name));
-    return true;
-  } catch (err) {
-    console.error('[Email Service] Resend verification FAILED:', {
-      code: err.code,
-      message: err.message,
-    });
+  if (!apiKey.startsWith('re_')) {
+    console.error('[Email Service] Resend verification FAILED: RESEND_API_KEY does not look valid (should start with "re_")');
     return false;
   }
+  const from = process.env.EMAIL_FROM || 'Appointees <onboarding@resend.dev>';
+  console.log(`[Email Service] Resend ready — API key present, sender: ${from}`);
+  return true;
 }
 
 function maskEmail(email) {
