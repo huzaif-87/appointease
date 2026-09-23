@@ -33,9 +33,24 @@ function ipv4Lookup(hostname, options, callback) {
   return dns.lookup(hostname, Object.assign({}, options, { family: 4 }), callback);
 }
 
+async function resolveIPv4Host(hostname) {
+  if (!hostname || /^(\d{1,3}\.){3}\d{1,3}$/.test(hostname)) {
+    return hostname;
+  }
+  try {
+    const addresses = await dns.promises.resolve4(hostname);
+    if (addresses && addresses.length > 0) {
+      return addresses[0];
+    }
+  } catch (err) {
+    console.warn(`[Email Service] IPv4 DNS resolution for ${hostname} fallback notice:`, err.message);
+  }
+  return hostname;
+}
+
 let transporter = null;
 
-function getTransporter() {
+async function getTransporter() {
   if (transporter) return transporter;
 
   const { EMAIL_USER, EMAIL_APP_PASSWORD } = process.env;
@@ -44,17 +59,20 @@ function getTransporter() {
     throw new Error('EMAIL_USER and EMAIL_APP_PASSWORD must be set in environment variables');
   }
 
-  const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+  const rawHost = process.env.EMAIL_HOST || 'smtp.gmail.com';
+  const targetHost = await resolveIPv4Host(rawHost);
   const port = parseInt(process.env.EMAIL_PORT, 10) || 587;
   const secure = process.env.EMAIL_SECURE === 'true' || port === 465;
 
   transporter = nodemailer.createTransport({
-    host,
+    host: targetHost,
     port,
     secure, // false for 587
     requireTLS: !secure,
-    lookup: ipv4Lookup,
     family: 4, // force IPv4 — avoids ENETUNREACH / timeouts on cloud hosts
+    tls: {
+      servername: rawHost, // SNI servername for SSL cert validation when host is an IP
+    },
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_APP_PASSWORD,
@@ -74,7 +92,8 @@ function getTransporter() {
  */
 async function verifyEmailConfig() {
   try {
-    await getTransporter().verify();
+    const activeTransporter = await getTransporter();
+    await activeTransporter.verify();
     console.log('[Email Service] Gmail SMTP verified — ready to send.');
     return true;
   } catch (err) {
@@ -156,7 +175,8 @@ async function sendEmail({ to, subject, html, text }) {
   const maskedTo = maskEmail(to);
 
   try {
-    const info = await getTransporter().sendMail({
+    const activeTransporter = await getTransporter();
+    const info = await activeTransporter.sendMail({
       from: process.env.EMAIL_FROM || `Appointees <${process.env.EMAIL_USER}>`,
       to,
       subject,
