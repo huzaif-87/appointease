@@ -33,9 +33,16 @@ function getTransporter() {
     throw new Error('EMAIL_USER and EMAIL_APP_PASSWORD must be set in environment variables');
   }
 
+  const host = process.env.EMAIL_HOST || 'smtp.gmail.com';
+  const port = parseInt(process.env.EMAIL_PORT, 10) || 587;
+  const secure = process.env.EMAIL_SECURE === 'true' || port === 465;
+
   transporter = nodemailer.createTransport({
-    service: 'gmail', // uses Gmail's known-good host/port/secure combo automatically
-    family: 4,          // force IPv4 — avoids ENETUNREACH on some hosts
+    host,
+    port,
+    secure, // false for 587
+    requireTLS: !secure,
+    family: 4, // force IPv4 — avoids ENETUNREACH / timeouts on cloud hosts
     auth: {
       user: EMAIL_USER,
       pass: EMAIL_APP_PASSWORD,
