@@ -131,6 +131,7 @@ function buildEmailHtml({ status, patientName, doctorName, date, time, bookingId
  * A failed send never blocks booking/reschedule/cancel operations.
  */
 async function sendEmail({ to, subject, html, text }) {
+  console.log('[DEBUG] Raw recipient email:', JSON.stringify(to));
   const maskedTo = maskEmail(to);
   const from = process.env.EMAIL_FROM || 'Appointees <onboarding@resend.dev>';
 
